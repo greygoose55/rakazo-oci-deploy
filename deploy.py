@@ -50,13 +50,33 @@ class Ledger:
             return False
         states = self.api('/deployments/' + str(ds[0]['id']) + '/statuses?per_page=1')
         return not states or states[0]['state'] not in ('failure', 'inactive')
-    def window_open(self):
-        # Delayed schedules must not bunch more than 3 requests into 10 minutes.
+    def window_wait(self):
+        # Completion timestamps are AFTER each launch, making the gate conservative.
         ds = self.api('/deployments?environment=foundation&per_page=3')
         if len(ds) < 3:
-            return True
-        oldest = datetime.fromisoformat(ds[-1]['created_at'].replace('Z', '+00:00')).timestamp()
-        return time.time() - oldest >= 600
+            return 0
+        statuses = [self.api('/deployments/' + str(x['id']) + '/statuses?per_page=1') for x in ds]
+        require(all(x and x[0]['state'] == 'failure' for x in statuses))
+        oldest = datetime.fromisoformat(statuses[-1][0]['created_at'].replace('Z', '+00:00')).timestamp()
+        return max(0, oldest + 601 - time.time())
+    def window_open(self):
+        return self.window_wait() == 0
+    def complete_cycle(self, outcome, attempts):
+        require(outcome in ('capacity_only', 'rate_limited'))
+        require(len(attempts) <= 3 and len(set(attempts)) == len(attempts))
+        require(outcome != 'capacity_only' or len(attempts) == 3)
+        for ident in attempts:
+            states = self.api('/deployments/' + str(ident) + '/statuses?per_page=1')
+            require(states and states[0]['state'] == 'failure')
+        require(not self.pending())
+        completed = self.api('/deployments', {'ref': os.environ['GITHUB_SHA'],
+            'environment': 'foundation-cycle-v2', 'auto_merge': False,
+            'required_contexts': [], 'transient_environment': False, 'production_environment': False,
+            'description': 'Definitive generic cycle completion',
+            'payload': {'schema': 2, 'run_id': int(os.environ['GITHUB_RUN_ID']),
+                'run_attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
+                'sha': os.environ['GITHUB_SHA'], 'outcome': outcome, 'attempts': attempts}})
+        self.status(completed['id'], 'success')
     def begin(self):
         d = self.api('/deployments', {'ref': os.environ['GITHUB_SHA'],
             'environment': 'foundation', 'auto_merge': False,
@@ -149,6 +169,7 @@ def main():
     if os.environ.get('VALIDATE_ONLY', 'true') == 'true':
         print('VALIDATED_NO_SUBMISSION')
         return
+    attempts = []
     for attempt in range(3):
         if attempt:
             time.sleep(180)
@@ -156,8 +177,17 @@ def main():
             return
         require(not ledger.pending())
         verify_free_policy()
+        wait = ledger.window_wait()
+        if 0 < wait <= 60:
+            time.sleep(wait)
+            if inspect():
+                return
+            require(not ledger.pending())
+            verify_free_policy()
         if not ledger.window_open():
-            print('RATE_WINDOW_WAIT_NO_SUBMISSION')
+            require(not inspect())
+            ledger.complete_cycle('rate_limited', attempts)
+            print('RATE_LIMITED_SAFE_CYCLE_RECORDED')
             return
         marker = ledger.begin()  # Must commit before the resource-creating API call.
         request = oci.core.models.LaunchInstanceDetails(
@@ -182,6 +212,7 @@ def main():
             if e.status == 500 and e.message.strip().lower().rstrip('.') == 'out of host capacity':
                 require(not inspect())
                 ledger.status(marker, 'failure')
+                attempts.append(marker)
                 print('CAPACITY_UNAVAILABLE')
                 continue
             raise Pause() from None
@@ -189,6 +220,9 @@ def main():
         print('REQUEST_ACCEPTED_AWAITING_HOST')
         inspect()
         return
+    require(not inspect())
+    ledger.complete_cycle('capacity_only', attempts)
+    print('CAPACITY_ONLY_SAFE_CYCLE_RECORDED')
 
 if __name__ == '__main__':
     try:
