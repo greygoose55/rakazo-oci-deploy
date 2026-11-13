@@ -2,7 +2,7 @@
 
 Reusable infrastructure deployment code for a self-hosted Rakazo server on an owner-approved Oracle Cloud Always Free target.
 
-The workflow includes an optional continuous deployment schedule. Configure and verify the dedicated free-only target before enabling it in your own repository. Forks must not inherit any credential or account configuration.
+The workflow supports owner-only dispatch. An optional external timer source is included below. Configure and verify the dedicated free-only target before enabling it in your own repository. Forks must not inherit any credential or account configuration.
 
 ## Privacy
 
@@ -39,3 +39,15 @@ Launch privileges are operation-limited and image-limited. OCI's documented poli
 `config.example.json` documents the secret's format with placeholders only. Copy it outside the repository, verify every account/region/resource field, and put the resulting JSON into the encrypted `DEPLOY_CONFIG` Actions secret. Never commit the populated copy. `cloud-init.example.yml` is a starting point for SSH-key-only access, root/password-login restrictions, firewall, fail2ban and security updates. Actual completion must be checked over SSH after cloud-init finishes; RUNNING alone does not prove hardening or application readiness.
 
 The API private key goes only in the encrypted `OCI_KEY_PEM` secret. The SSH private key never belongs in this project or its Actions secrets. Use a dedicated key and keep it with the operator who will validate the host.
+
+## Optional isolated external timer
+
+`external-timer.mjs` is generic Cloudflare Worker source for a scheduled handler plus a SQLite-backed Durable Object class named `DispatchGate`. It calls GitHub's workflow-dispatch API, not Oracle. It must never receive Oracle credentials. Keep its repository-only Actions read/write token in an encrypted `GH_TOKEN` Worker secret, not in source. A temporary credential used to deploy the timer is separate and should be revoked after setup.
+
+Bind the SQLite Durable Object as `GATE`. Declare its class in deployment metadata as an export with type `durable-object` and storage `sqlite`. Plain bindings are `OWNER`, `REPO`, `WORKFLOW` (for example `deploy.yml`), `ENABLED` (initially `false`) and `BASELINE_RUN` (a privately reconciled completed resource-enabled run ID). The timer expects the paired runner's latest three generic deployment markers to be definite capacity failures newer than that run began. This is not a general-purpose workflow scheduler.
+
+Before enabling, remove any native repository schedule, verify there are no other launchers, and verify all free-plan limits and account permissions. Keep workers.dev, preview URLs, routes and custom domains disabled. No public HTTP trigger is provided. Enable only one ten-minute cron after configuration and secret verification. Free timers can be delayed; propagation alone can take 15 minutes. Prove real scheduled dispatches and complete runner cycles before calling the automation operational.
+
+The single globally named Durable Object uses atomic SQLite state changes before network access and before dispatch. Overlapping ticks cannot both claim the gate. A crash, unknown response, throttling, auth failure, disabled workflow, untracked run or ambiguous dispatch leaves a non-expiring review latch. Never reset a paused/checking/pending latch without reconciling the remote state first. Workers KV is not an atomic substitute. The runner independently retains concurrency, rolling attempt limits, pending request reconciliation and all free-only target checks.
+
+Local safety checks include deterministic SQLite cases and actual Workers-runtime tests for overlapping invocations and cold-restart persistence. These checks are not evidence of a live schedule working. On a verified host or a safety pause, stop the timer. After successful host verification, delete the isolated timer and its state and revoke only its dedicated repository token. Preserve generic source and unrelated credentials.
