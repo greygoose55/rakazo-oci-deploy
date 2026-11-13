@@ -51,3 +51,32 @@ Before enabling, remove any native repository schedule, verify there are no othe
 The single globally named Durable Object uses atomic SQLite state changes before network access and before dispatch. Overlapping ticks cannot both claim the gate. A crash, unknown response, throttling, auth failure, disabled workflow, untracked run or ambiguous dispatch leaves a non-expiring review latch. Never reset a paused/checking/pending latch without reconciling the remote state first. Workers KV is not an atomic substitute. The runner independently retains concurrency, rolling attempt limits, pending request reconciliation and all free-only target checks.
 
 Local safety checks include deterministic SQLite cases and actual Workers-runtime tests for overlapping invocations and cold-restart persistence. These checks are not evidence of a live schedule working. On a verified host or a safety pause, stop the timer. After successful host verification, delete the isolated timer and its state and revoke only its dedicated repository token. Preserve generic source and unrelated credentials.
+
+### Safe cycle completion and scheduling jitter
+
+The runner keeps the maximum of three launch requests in a rolling 600 seconds.
+It uses definite failure completion times, with a one-second safety margin, rather
+than timestamps recorded before requests. A wait of at most 60 seconds can absorb
+small differences in scheduled start or runner startup. A longer wait ends the
+cycle without another launch.
+
+A green job alone does not prove that a cycle made three attempts. The runner
+records a separate `foundation-cycle-v2` deployment only after a definitive safe
+ending. Its payload binds the run, run attempt, commit, outcome and exact attempt
+IDs. The completion must have a committed success status. Zero or partial attempt
+cycles must explicitly say `rate_limited`; a full `capacity_only` cycle must list
+three definite capacity failures. Accepted requests, unknown outcomes, interrupted
+cycles and pending markers do not produce safe completion evidence.
+
+The external timer independently checks this evidence before another dispatch.
+Missing, stale or inconsistent evidence pauses the timer. It never treats an
+ordinary successful job as permission to ignore an unknown infrastructure outcome.
+
+A legacy paused cycle needs a separately reviewed, one-time recovery, not an
+ordinary retry. Recovery parameters bind an exact run, commit and prior failed
+markers to a reviewed window no longer than 15 minutes. The existing Durable
+Object consumes a persistent one-use receipt before it can dispatch. The same
+receipt cannot rearm the timer after a crash, lost response, restart or redeploy.
+No public HTTP handler can arm or trigger recovery. Reviewers must reconcile live
+infrastructure and the exact zero-attempt legacy job before supplying those
+parameters. This is not an automatic reset mechanism.
