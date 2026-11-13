@@ -2,7 +2,7 @@
 
 Reusable infrastructure deployment code for a self-hosted Rakazo server on an owner-approved Oracle Cloud Always Free target.
 
-This project is being prepared and reviewed. It is not yet an enabled deployment.
+The workflow includes an optional continuous deployment schedule. Configure and verify the dedicated free-only target before enabling it in your own repository. Forks must not inherit any credential or account configuration.
 
 ## Privacy
 
@@ -22,7 +22,7 @@ The public repository contains generic code only. Never commit account configura
 
 Use a separate non-admin OCI identity with only deployment and inventory permissions. Never place an owner/admin API key in a public project's automation. Configure `DEPLOY_CONFIG` and `OCI_KEY_PEM` as repository secrets. Keep SSH private keys outside GitHub.
 
-Start with validation-only mode. A successful syntax or mock test is not proof that a deployment can run. Verify authentication, inventory, target, permission scope, output privacy, state persistence and stopping behavior before enabling scheduled submissions.
+Start with validation-only mode. The offline safety tests run before every hosted deployment. A successful syntax or mock test is not proof that a deployment can run. Verify authentication, inventory, target, permission scope, output privacy, state persistence and stopping behavior before enabling scheduled submissions.
 
 GitHub schedules can be delayed or dropped. Keep a separate read-only liveness check; do not run another launcher in parallel. Stop if GitHub billing blocks execution, rather than enabling paid overage.
 
