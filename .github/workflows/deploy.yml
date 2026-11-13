@@ -1,0 +1,34 @@
+name: Guarded Rakazo deployment
+on:
+  workflow_dispatch:
+    inputs:
+      validate_only:
+        description: Validate without creating a host
+        required: true
+        default: true
+        type: boolean
+permissions:
+  contents: read
+  deployments: write
+  actions: write
+concurrency:
+  group: guarded-foundation-deployment
+  cancel-in-progress: false
+jobs:
+  foundation:
+    if: github.event_name == 'schedule' || github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install pinned Oracle SDK
+        run: python -m pip install --quiet oci==2.191.0
+      - name: Validate and deploy approved foundation
+        run: python deploy.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_CONFIG: ${{ secrets.DEPLOY_CONFIG }}
+          OCI_KEY_PEM: ${{ secrets.OCI_KEY_PEM }}
+          VALIDATE_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.validate_only && 'true' || 'false' }}

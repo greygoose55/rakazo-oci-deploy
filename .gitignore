@@ -1,0 +1,7 @@
+*.pem
+*.key
+*.pub
+*config*.json
+.env*
+__pycache__/
+!config.example.json

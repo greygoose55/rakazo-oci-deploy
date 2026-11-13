@@ -1,0 +1,27 @@
+{
+  "auth": {
+    "user": "YOUR_DEPLOYMENT_USER_OCID",
+    "tenancy": "YOUR_TENANCY_OCID",
+    "region": "YOUR_HOME_REGION",
+    "fingerprint": "YOUR_API_KEY_FINGERPRINT"
+  },
+  "target": {
+    "free_only": true,
+    "dedicated_empty_tenancy_verified": true,
+    "shape": "VM.Standard.A1.Flex",
+    "ocpus": 1,
+    "memory_gb": 6,
+    "boot_gb": 50,
+    "region": "YOUR_HOME_REGION",
+    "home_region": "YOUR_HOME_REGION",
+    "compartment": "YOUR_TENANCY_OCID",
+    "ad": "YOUR_AVAILABILITY_DOMAIN",
+    "name": "YOUR_INSTANCE_NAME",
+    "subnet": "YOUR_PUBLIC_SUBNET_OCID",
+    "vcn": "YOUR_VCN_OCID",
+    "image": "YOUR_APPROVED_UBUNTU_24_ARM64_IMAGE_OCID",
+    "ssh_public_key": "YOUR_SSH_PUBLIC_KEY",
+    "ssh_sha256": "SHA256_OF_EXACT_PUBLIC_KEY_STRING",
+    "cloud_init": "CONTENTS_OF_REVIEWED_CLOUD_INIT"
+  }
+}

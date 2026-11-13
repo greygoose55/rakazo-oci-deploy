@@ -1,0 +1,40 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+ssh_pwauth: false
+disable_root: true
+write_files:
+  - path: /etc/ssh/sshd_config.d/00-rakazo-hardening.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      PubkeyAuthentication yes
+      MaxAuthTries 3
+      X11Forwarding no
+      AllowAgentForwarding no
+  - path: /etc/fail2ban/jail.d/rakazo.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [sshd]
+      enabled = true
+      backend = systemd
+      maxretry = 5
+      findtime = 10m
+      bantime = 1h
+runcmd:
+  - [ufw, default, deny, incoming]
+  - [ufw, default, allow, outgoing]
+  - [ufw, allow, '22/tcp']
+  - [ufw, --force, enable]
+  - [systemctl, enable, --now, fail2ban]
+  - [systemctl, enable, --now, unattended-upgrades]
+  - [sh, -c, 'sshd -t && systemctl reload ssh']
+  - [sh, -c, 'touch /var/lib/cloud/rakazo-hardening-complete']
